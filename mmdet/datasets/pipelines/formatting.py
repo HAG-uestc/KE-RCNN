@@ -243,6 +243,8 @@ class DefaultFormatBundle:
                 to_tensor(results['gt_semantic_seg'][None, ...]),
                 padding_value=self.pad_val['seg'],
                 stack=True)
+        if 'gt_attributes' in results.keys():
+            results['gt_attributes'] = DC(to_tensor(results['gt_attributes']))
         return results
 
     def _add_default_meta_keys(self, results):

@@ -299,3 +299,44 @@ class CrossEntropyLoss(nn.Module):
             avg_non_ignore=self.avg_non_ignore,
             **kwargs)
         return loss_cls
+
+
+@LOSSES.register_module()
+class BCELossWithLogits(nn.Module):
+    """Binary Cross Entropy loss with Logits"""
+
+    def __init__(self, reduction='mean', loss_weight=1., custom_cls_channels=True):
+        super().__init__()
+        self.criterion = F.binary_cross_entropy_with_logits
+        self.loss_weight = loss_weight
+        self.custom_cls_channels = custom_cls_channels
+        self.redution = reduction
+    
+    def get_cls_channels(self, num_classes):
+        return num_classes
+
+    def forward(self,
+                cls_score,
+                label,
+                weight=None,
+                avg_factor=None,
+                reduction_override=None,
+                ignore_index=None,
+                **kwargs):
+        """Forward function.
+
+        Note:
+            batch_size: N
+            num_labels: K
+
+        Args:
+            output (torch.Tensor[N, K]): Output classification.
+            target (torch.Tensor[N, K]): Target classification.
+            target_weight (torch.Tensor[N, K] or torch.Tensor[N]):
+                Weights across different labels.
+        """
+        loss = self.criterion(cls_score.reshape(-1), label.float(), reduction='none')
+        loss = weight_reduce_loss(
+            loss, weight, reduction=self.redution, avg_factor=avg_factor)
+        loss *= self.loss_weight
+        return loss

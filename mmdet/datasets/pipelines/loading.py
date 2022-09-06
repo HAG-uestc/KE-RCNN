@@ -412,6 +412,51 @@ class LoadAnnotations:
 
 
 @PIPELINES.register_module()
+class LoadFashionAnnotations(LoadAnnotations):
+
+    def __init__(self,
+                 *arg,
+                 with_attribute=False,
+                 with_human=False,
+                 **kwargs):
+        super(LoadFashionAnnotations, self).__init__(*arg, **kwargs)
+        self.with_attribute = with_attribute
+        self.with_human = with_human
+    
+    def _load_attributes(self, results):
+        """Private function to load fashionpedia attribute annotations.
+
+        Args:
+            results (dict): Result dict from :obj:`dataset`.
+
+        Returns:
+            dict: The dict contains loaded fashionpedia attribute annotations.
+        """
+        results['gt_attributes'] = results['ann_info']['attributes'].copy()
+        return results
+    
+    def _load_human_masks(self, results):
+        assert self.poly2mask
+        h, w = results['img_info']['height'], results['img_info']['width']
+        gt_masks = results['ann_info']['masks']
+        if self.poly2mask:
+            gt_masks = BitmapMasks(
+                [self._poly2mask(mask, h, w) for mask in gt_masks], h, w)
+            gt_masks.masks = np.concatenate([gt_masks.masks, gt_masks.masks.max(0)[None, :]], axis=0)  
+        results['gt_masks'] = gt_masks
+        return results
+    
+    def __call__(self, results):
+        results = super(LoadFashionAnnotations, self).__call__(results)
+        if self.with_attribute:
+            results = self._load_attributes(results)
+        if self.with_human and self.with_mask:
+            results = self._load_human_masks(results)
+        
+        return results
+
+
+@PIPELINES.register_module()
 class LoadPanopticAnnotations(LoadAnnotations):
     """Load multiple types of panoptic annotations.
 
