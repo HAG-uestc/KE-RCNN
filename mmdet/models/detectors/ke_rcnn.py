@@ -111,12 +111,12 @@ class KERCNN(TwoStageDetector):
             x, proposal_list, img_metas, rescale=rescale)
 
         if isinstance(self.roi_head.bbox_head, nn.ModuleList):
-            fc_cls_weight = self.roi_head.bbox_head[-1].get_fc_cls_weight()
+            fc_cls_weight = self.roi_head.bbox_head[-1].fc_cls.weight
         else:
-            fc_cls_weight = self.roi_head.bbox_head.get_fc_cls_weight()
+            fc_cls_weight = self.roi_head.bbox_head.fc_cls.weight
 
         # attribute forward
-        attr_results_list = self.attr_head.simple_test(
+        attr_results = self.attr_head.simple_test(
             x, 
             results['garments_bboxes'],
             results['garments_scores'],
@@ -125,6 +125,5 @@ class KERCNN(TwoStageDetector):
             img_metas,
             rescale=rescale)
 
-        if results['segm_results'] is not None:
-            return [[results['det_results'], results['segm_results'], attr_results_list]]
-        return [[results['det_results'], attr_results_list]]
+        return [dict(det_results=results['det_results'], segm_results=results['segm_results'],
+                    attr_results=attr_results)]

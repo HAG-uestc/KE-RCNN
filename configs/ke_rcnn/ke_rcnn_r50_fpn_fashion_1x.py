@@ -6,3 +6,5 @@ _base_ = [
 ]
 
 custom_hooks = []
+evaluation = dict(interval=100, metric='bbox')
+checkpoint_config = dict(interval=2)

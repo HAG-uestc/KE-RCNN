@@ -85,7 +85,7 @@ model = dict(
             num_bbox_classes=47,
             roi_feat_size=7,
             in_dims=256,
-            know_matrix_path='data/fashionpedia/train_attr_knowledge_matrix.npy',
+            know_matrix_path='data/fashionpedia/train_norm_attr_knowledge_matrix.npy',
             cross_encoder=dict(
                 type='TransformerLayerSequence',
                 num_layers=2,
@@ -138,7 +138,7 @@ model = dict(
                 target_stds=[1.0, 1.0, 1.0, 1.0]),
             with_reg=False,
             loss_cls=dict(
-                type='BCELossWithLogits', loss_weight=1.0, custom_cls_channels=True))),
+                type='BCELossWithLogits', loss_weight=5.0, custom_cls_channels=True))),
     # model training and testing settings
     train_cfg=dict(
         rpn=dict(

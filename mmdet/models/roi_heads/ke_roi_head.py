@@ -167,19 +167,20 @@ class KERoIHead(StandardRoIHead):
 
         return labels, label_weights, None, None
     
-    def aug_test(self,
-                 x,
-                 garments_bboxes,
-                 garments_scores,
-                 garments_labels,
-                 fc_cls_weight,
-                 img_metas, rescale=False):
+    def simple_test(self,
+                    x,
+                    garments_bboxes,
+                    garments_scores,
+                    garments_labels,
+                    fc_cls_weight,
+                    img_metas,
+                    rescale=False):
         """Test with augmentations.
 
         If rescale is False, then returned bboxes and masks will fit the scale
         of imgs[0].
         """
-        attributes = self.aug_test_bboxes(x, img_metas,
+        attributes = self.simple_test_bboxes(x, img_metas,
                                              garments_bboxes,
                                              garments_scores,
                                              garments_labels,
@@ -193,83 +194,65 @@ class KERoIHead(StandardRoIHead):
             attribute_results.append([attributes[id] for id in ids])
         return attribute_results
 
-    def aug_test_bboxes(self,
-                        feats,
-                        img_metas,
-                        garments_bboxes,
-                        garments_scores,
-                        garments_labels,
-                        fc_cls_weight,
-                        rcnn_test_cfg):
-        """Test det bboxes with test time augmentation."""
-        aug_scores = []
-        for x, img_meta in zip(feats, img_metas):
-            # only one image in the batch
-            img_shape = img_meta[0]['img_shape']
-            scale_factor = img_meta[0]['scale_factor']
-            flip = img_meta[0]['flip']
-            flip_direction = img_meta[0]['flip_direction']
-            # TODO more flexible
-            garments_proposals = bbox_mapping(garments_bboxes[:, :4], img_shape,
-                                     scale_factor, flip, flip_direction)
-            rois = bbox2roi([garments_proposals])
-            bbox_feats = self.bbox_roi_extractor(
-                x[:self.bbox_roi_extractor.num_inputs], rois)
+    def simple_test_bboxes(self,
+                           feats,
+                           img_metas,
+                           garments_bboxes,
+                           garments_scores,
+                           garments_labels,
+                           fc_cls_weight,
+                           rcnn_test_cfg):
+        # only one image in the batch
+        img_shape = img_metas[0]['img_shape']
+        scale_factor = img_metas[0]['scale_factor']
+        flip = img_metas[0]['flip']
+        flip_direction = img_metas[0]['flip_direction']
+        garments_proposals = bbox_mapping(garments_bboxes[:, :4], img_shape,
+                                    scale_factor, flip, flip_direction)
+        rois = bbox2roi([garments_proposals])
+        bbox_feats = self.bbox_roi_extractor(
+            feats[:self.bbox_roi_extractor.num_inputs], rois)
 
-            # get pos cls score
-            pos_cls_score = garments_scores
+        # get pos cls score
+        pos_cls_score = garments_scores
 
-            # get the human feats
-            inds = torch.where(garments_labels == rcnn_test_cfg.num_classes-1)[0]
-            max_ind = inds[torch.argmax(garments_bboxes[inds][:, 4])].reshape(-1,)
-            human_rois = bbox2roi([garments_proposals[max_ind]])
-            human_feats = self.human_bbox_roi_extractor(
-                x[:self.human_bbox_roi_extractor.num_inputs], human_rois)
-            human_feats = human_feats.repeat(garments_proposals.shape[0], 1, 1, 1)
+        # get the human feats
+        inds = torch.where(garments_labels == rcnn_test_cfg.num_classes-1)[0]
+        if inds.shape[0] == 0:
+            attributes = []
+            for _ in garments_bboxes:
+                attributes.append(np.zeros((0,), dtype=np.int64))
+            return attributes
 
-            # get the human loc relation
-            human_bbox = garments_proposals[max_ind]
-            human_bbox = human_bbox.repeat(garments_proposals.shape[0], 1).reshape(-1, 4)
+        max_ind = inds[torch.argmax(garments_bboxes[inds][:, 4])].reshape(-1,)
+        human_rois = bbox2roi([garments_proposals[max_ind]])
+        human_feats = self.human_bbox_roi_extractor(
+            feats[:self.human_bbox_roi_extractor.num_inputs], human_rois)
+        human_feats = human_feats.repeat(garments_proposals.shape[0], 1, 1, 1)
 
-            bbox_locs = self.bbox_head.bbox_coder.encode(garments_proposals, human_bbox)
+        # get the human loc relation
+        human_bbox = garments_proposals[max_ind]
+        human_bbox = human_bbox.repeat(garments_proposals.shape[0], 1).reshape(-1, 4)
 
-            # forward
-            bbox_results = self._bbox_forward(bbox_feats,
-                                              human_feats,
-                                              garments_labels,
-                                              pos_cls_score,
-                                              bbox_locs,
-                                              fc_cls_weight)
-            scores = self.get_bboxes(bbox_results['cls_score'], cfg=rcnn_test_cfg)
-            aug_scores.append(scores)
-        # after merging, bboxes will be rescaled to the original image size
-        merged_scores = self.merge_aug_bboxes(aug_scores, img_metas, rcnn_test_cfg)
+        bbox_locs = self.bbox_head.bbox_coder.encode(garments_proposals, human_bbox)
+
+        # forward
+        bbox_results = self._bbox_forward(bbox_feats,
+                                          human_feats,
+                                          garments_labels,
+                                          pos_cls_score,
+                                          bbox_locs,
+                                          fc_cls_weight)
+        scores = self.get_bboxes(bbox_results['cls_score'], cfg=rcnn_test_cfg)
+        scores = scores.detach().cpu().numpy()
         attributes = []
-        for merged_score in merged_scores:
+        for merged_score in scores:
             attributes.append(np.argwhere(merged_score > rcnn_test_cfg.attribute_score_thr).reshape(-1,))
-        
         return attributes
     
     def get_bboxes(self, 
                    cls_score,  
                    cfg=None):
         scores = torch.sigmoid(cls_score).reshape(-1, cfg.attribute_num)
-
-        return scores
-    
-    def merge_aug_bboxes(self, aug_scores, img_metas, rcnn_test_cfg):
-        """Merge augmented detection bboxes and scores.
-
-        Args:
-            aug_bboxes (list[Tensor]): shape (n, 4*#class)
-            aug_scores (list[Tensor] or None): shape (n, #class)
-            img_shapes (list[Tensor]): shape (3, ).
-            rcnn_test_cfg (dict): rcnn test config.
-
-        Returns:
-            tuple: (bboxes, scores)
-        """
-        scores = torch.stack(aug_scores).mean(dim=0).reshape(-1, rcnn_test_cfg.attribute_num)
-        scores = scores.detach().cpu().numpy()
 
         return scores

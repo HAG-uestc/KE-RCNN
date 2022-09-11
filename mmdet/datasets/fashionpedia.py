@@ -2,7 +2,6 @@ import mmcv
 import numpy as np
 from .builder import DATASETS
 from .coco import CocoDataset
-from mmdet.core import encode_mask_results
 
 @DATASETS.register_module()
 class FashionPedia(CocoDataset):
@@ -108,16 +107,29 @@ class FashionPedia(CocoDataset):
         return ann
 
     def results2json(self, results, outfile_prefix):
-        '''save the bbox and attribute result to json file'''
         result_files = dict()
-        if len(results[0]) == 2:
-            json_results = self._attribute_2json(results)
+        if isinstance(results[0], list):
+            json_results = self._det2json(results)
             result_files['bbox'] = f'{outfile_prefix}.bbox.json'
+            result_files['proposal'] = f'{outfile_prefix}.bbox.json'
             mmcv.dump(json_results, result_files['bbox'])
-        elif len(results[0]) == 3:
+        elif isinstance(results[0], tuple):
             json_results = self._segm2json(results)
+            result_files['bbox'] = f'{outfile_prefix}.bbox.json'
+            result_files['proposal'] = f'{outfile_prefix}.bbox.json'
             result_files['segm'] = f'{outfile_prefix}.segm.json'
-            mmcv.dump(json_results, result_files['segm'])
+            mmcv.dump(json_results[0], result_files['bbox'])
+            mmcv.dump(json_results[1], result_files['segm'])
+        elif isinstance(results[0], np.ndarray):
+            json_results = self._proposal2json(results)
+            result_files['proposal'] = f'{outfile_prefix}.proposal.json'
+            mmcv.dump(json_results, result_files['proposal'])
+        elif isinstance(results[0], dict):
+            json_results = self._attribute_2json(results)
+            result_files['attr'] = f'{outfile_prefix}.attr.json'
+            mmcv.dump(json_results, result_files['attr'])
+        else:
+            raise TypeError('invalid type of results')
         return result_files
     
     def _attribute_2json(self, results):
@@ -125,13 +137,17 @@ class FashionPedia(CocoDataset):
         json_results = []
         for idx in range(len(self)):
             img_id = self.img_ids[idx]
-            result, attribute_result = results[idx]
-            result = result[0]
+            det_result, segm_result, attribute_result = results[idx].keys()
+            det_result = results[idx][det_result]
+            segm_result = results[idx][segm_result]
+            attribute_result = results[idx][attribute_result]
             if self.with_human:
-                result = result[:len(self.CLASSES)-1]
+                det_result = det_result[:len(self.CLASSES)-1]
+                segm_result = segm_result[:len(self.CLASSES) - 1]
                 attribute_result = attribute_result[:len(self.CLASSES)-1]
-            for label in range(len(result)):
-                bboxes = result[label]
+            for label in range(len(det_result)):
+                bboxes = det_result[label]
+                segms = segm_result[label]
                 attributes = attribute_result[label]
                 for i in range(bboxes.shape[0]):
                     attribute_ids = attributes[i]
@@ -144,45 +160,9 @@ class FashionPedia(CocoDataset):
                     data['bbox'] = self.xyxy2xywh(bboxes[i])
                     data['attribute_ids'] = attribute_ids.tolist()
                     data['score'] = float(bboxes[i][4])
-                    data['category_id'] = self.cat_ids[label]
-                    json_results.append(data)
-        return json_results
-
-    def _segm2json(self, results):
-        """Convert detection results to COCO json style."""
-        json_results = []
-        for idx in range(len(self)):
-            img_id = self.img_ids[idx]
-            result, seg, attribute_result = results[idx]
-            seg = encode_mask_results(seg)
-            result = result[0]
-            if self.with_human:
-                result = result[:len(self.CLASSES)-1]
-                seg = seg[:len(self.CLASSES)-1]
-                attribute_result = attribute_result[:len(self.CLASSES)-1]
-            for label in range(len(result)):
-                bboxes = result[label]
-                attributes = attribute_result[label]
-                if isinstance(seg, tuple):
-                    segms = seg[0][label]
-                    mask_score = seg[1][label]
-                else:
-                    segms = seg[label]
-                    mask_score = [bbox[4] for bbox in bboxes]
-                for i in range(bboxes.shape[0]):
-                    attribute_ids = attributes[i]
-                    attribute_ids = \
-                        np.where(attribute_ids <= 234, attribute_ids, attribute_ids+46)
-                    attribute_ids = \
-                        np.where(attribute_ids <= 283, attribute_ids, attribute_ids+1)
-                    data = dict()
-                    data['image_id'] = img_id
-                    data['bbox'] = self.xyxy2xywh(bboxes[i])
-                    data['attribute_ids'] = attribute_ids.tolist()
-                    data['score'] = float(bboxes[i][4])
-                    data['category_id'] = self.cat_ids[label]
                     if isinstance(segms[i]['counts'], bytes):
                         segms[i]['counts'] = segms[i]['counts'].decode()
                     data['segmentation'] = segms[i]
+                    data['category_id'] = self.cat_ids[label]
                     json_results.append(data)
         return json_results
