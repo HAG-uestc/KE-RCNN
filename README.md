@@ -37,10 +37,10 @@ Make sure to put the files as the following structure:
 
 |  Backbone    |  LR  | AP_iou+f1 | AP_mask_iou+f1 | DOWNLOAD |
 |--------------|:----:|:---------:|:--------------:|:--------:|
-|  R-50        |  1x  | 39.6      | 36.4           |[model](https://drive.google.com/file/d/1-m83sJcu9fsRNE4pNTBLmkOB8cKhPyCK/view?usp=sharing)|
-|  R-101       |  1x  | 39.9      | 36.0           |[model](https://drive.google.com/file/d/1Zqa7ziBKUe3-t419dsLq6ihtYUfFLHhr/view?usp=sharing)|
-|  HRNet-w18   |  1x  | 36.4      | -/-            |[model]()  |
-|  Swin-tiny   |  1x  | 43.7      | 40.5           |[model](https://drive.google.com/file/d/1Y_yVRp7G6E07Mty8TIEWJe7a4dQXl44E/view?usp=sharing)|
+|  R-50        |  1x  | 39.6      | 36.4           |[model](https://drive.google.com/file/d/10mz200uBm-2DqAYN9pbSTYG4sk8SNou8/view?usp=sharing)|
+|  R-101       |  1x  | 39.9      | 36.6           |[model](https://drive.google.com/file/d/1Z1gBiFcL1YuVpL3jmYvs-uqylW8noROW/view?usp=sharing)|
+|  HRNet-w18   |  1x  | 38.0      | 35.3           |[model](https://drive.google.com/file/d/1fEkR3ylrw5_sRU4ofaq0URCJuCrBb-AJ/view?usp=sharing)|
+|  Swin-tiny   |  1x  | 43.7      | 40.5           |[model](https://drive.google.com/file/d/1sirL9xbeASFi3Ey1TpjUsXSQIGQstZP3/view?usp=sharing)|
 
 - This is a reimplementation. Thus, the numbers are slightly different from our original paper.
 ## Evaluation
@@ -56,4 +56,14 @@ python eval/fashion_eval.py
 ```
 # training
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 ./tools/dist_train.sh configs/ke_rcnn/ke_rcnn_r50_fpn_fashion_1x.py 8
+```
+
+## Citation
+```
+@article{wang2022ke,
+  title={KE-RCNN: unifying knowledge based reasoning into part-level attribute parsing},
+  author={Wang, Xuanhan and Song, Jingkuan and Chen, Xiaojia and Cheng, Lechao and Gao, Lianli and Shen, Heng Tao},
+  journal={arXiv preprint arXiv:2206.10146},
+  year={2022}
+}
 ```
